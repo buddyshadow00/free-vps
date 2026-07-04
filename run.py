@@ -61,6 +61,10 @@ DEFAULT_TEMPLATE = "code-interpreter"
 DEFAULT_CWD = "/workspace"
 OWNER_NAME = "IamGunpoint"
 
+# ---------- DEFAULT RESOURCES (8 GB RAM, 6 vCPUs) ----------
+DEFAULT_RAM_MB = 8192    # 8 GB
+DEFAULT_VCPUS = 6
+
 # HopX docs do not state one exact maximum timeout in the quickstart.
 # So "max" means: try these from largest to smaller until HopX accepts.
 MAX_TIMEOUT_TRIES = [
@@ -249,17 +253,47 @@ def parse_timeout_choice(raw: str) -> list[int]:
 def create(api_key: str) -> Any:
     require_sdk()
     template = input(f"Template [{DEFAULT_TEMPLATE}]: ").strip() or DEFAULT_TEMPLATE
+
+    # Ask for RAM and vCPUs, with defaults
+    ram_input = input(f"RAM in MB (default {DEFAULT_RAM_MB} MB = 8 GB): ").strip()
+    if ram_input:
+        try:
+            ram = int(ram_input)
+        except:
+            ram = DEFAULT_RAM_MB
+            warn("Invalid RAM, using default")
+    else:
+        ram = DEFAULT_RAM_MB
+
+    vcpu_input = input(f"Number of vCPUs (default {DEFAULT_VCPUS}): ").strip()
+    if vcpu_input:
+        try:
+            vcpus = int(vcpu_input)
+        except:
+            vcpus = DEFAULT_VCPUS
+            warn("Invalid vCPUs, using default")
+    else:
+        vcpus = DEFAULT_VCPUS
+
     timeout_raw = input("Timeout seconds [max]: ").strip()
     timeout_tries = parse_timeout_choice(timeout_raw)
 
     last_error: Optional[Exception] = None
     for timeout in timeout_tries:
         try:
-            info(f"creating sandbox template={template}, timeout={timeout}s ...")
-            sb = Sandbox.create(template=template, timeout_seconds=timeout, api_key=api_key)
+            info(f"creating sandbox template={template}, timeout={timeout}s, ram={ram}MB, vcpus={vcpus} ...")
+            # Pass memory (MB) and vcpus to Sandbox.create
+            sb = Sandbox.create(
+                template=template,
+                timeout_seconds=timeout,
+                api_key=api_key,
+                memory=ram,        # MB
+                vcpus=vcpus
+            )
             set_current(sid_of(sb))
             ok(f"created {sid_of(sb)}")
             ok(f"accepted timeout: {timeout}s")
+            ok(f"RAM: {ram} MB, vCPUs: {vcpus}")
             show_info(sb)
             return sb
         except Exception as e:
@@ -326,6 +360,11 @@ def show_info(sb: Any) -> None:
         v = val(inf, k, None)
         if v:
             print(f"{k:14}: {v}")
+    # Show resource limits if available
+    resources = val(inf, "resources", {})
+    if resources:
+        print("Memory (MB):", resources.get("memory_mb", "?"))
+        print("vCPUs      :", resources.get("vcpus", "?"))
     print()
 
 
